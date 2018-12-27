@@ -1,4 +1,4 @@
-(() => {
+((window) => {
     "use strict";
 
     function demo() {
@@ -10,14 +10,16 @@
     let apps = [{
             match: /./,
             enabled: true,
-            topFrameOnly: true,
-            require: ['http://127.0.0.1:8000/hello.txt'],
+            topFrameOnly: false,
+            require: [
+                'https://cdn.jsdelivr.net/npm/vue'
+            ],
             call: demo
         },
         {
             match: /^https?:\/\/stackoverflow.com\/questions\//,
             enabled: false,
-            topFrameOnly: true,
+            topFrameOnly: false,
             require: [],
             call: () => {
                 console.log(this);
@@ -42,44 +44,42 @@
         onRequiredDone() {
             this.requiredJsDone += 1;
             if (this.requiredJsDone == this.requiredJs.length) {
-                this.requiredCode.forEach(x => eval(x));
+                this.requiredCode.forEach(
+                    (function(x) { eval(x); }).bind(window)
+                );
                 this.finallyRun();
             }
         }
 
         sendRequests() {
             let that = this;
+            let order = 0;
             this.requiredJs.forEach((url) => {
                 var xhttp = new XMLHttpRequest();
-                xhttp.onreadystatechange = function() {
+                xhttp.onreadystatechange = (function(index) {
                     if (this.readyState == 4 && this.status == 200) {
-                        that.requiredCode.push(this.responseText);
+                        that.requiredCode[index] = this.responseText;
                         that.onRequiredDone();
                     }
-                };
+                }).bind(xhttp, order);
                 xhttp.open('GET', url, true);
                 xhttp.send();
+                order += 1;
             });
         }
     }
 
     apps.forEach(app => {
-        if (!app.enabled) {
+        if (!app.enabled ||
+            !window.location.href.match(app.match)) {
             return;
         }
 
-        if (!window.top.location.href.match(app.match)) {
-            return;
-        }
-
-        if (app.topFrameOnly == undefined) {
-            app.topFrameOnly = true;
-        }
-
-        if (app.topFrameOnly && window !== window.top) {
+        let isTopFrame = (window === window.top);
+        if (app.topFrameOnly && !isTopFrame) {
             return;
         }
 
         new ScriptLoader(app.require, app.call);
     });
-})();
+})(this);
